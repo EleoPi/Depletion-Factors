@@ -10,7 +10,6 @@ import os
 from pcraster import readmap, pcr2numpy
 from netCDF4 import Dataset
 import numpy as np
-#import gdal
 
 #function
 def new_netcdf(filename, stressor,spatial_unit, latitude,longitude, time, stressor_name, unit_time,unit_stressor):
@@ -79,12 +78,6 @@ dem_map = readmap('data/DEM_05min.map')
 dem =pcr2numpy(dem_map,1e20)
 dem.shape
 
-#fn = 'data/new_DEM_05min.tif'
-#dem_temp = gdal.Open(fn)
-#print(dem_temp)
-#dem=dem_temp.GetRasterBand(1)
-#print(dem)
-
 #open basin delineation: the spatial resolution can be changed here.
 spatial_unit_map= readmap('data/catchments.map')#the catchment map corresponds to the river basin
 spatial_unit =pcr2numpy(spatial_unit_map,1e20)
@@ -139,34 +132,4 @@ time1 = dataset.variables["time"]#all timesteps
 lat1 = dataset.variables["lat"]
 lon1 = dataset.variables["lon"]
 
-new_netcdf('output/test_groundwater_head_%n_catchments_1950_to_2010', stressor_aggregated_timeserie, spatial_unit, lat1, lon1, time1, "groundwater_head", "month", "m")
-
-# stressor_dataset_out = Dataset('output/groundwater_head_aggregated_2catchment_monthly_1960_test1.nc','w',format = 'NETCDF4')
-# #create dimensions and variables
-
-# stressor_dataset_out.createDimension("time", stressor_aggregated_timeserie.shape[1])
-# stressor_dataset_out.createDimension("lat", spatial_unit.shape[0])
-# stressor_dataset_out.createDimension("lon", spatial_unit.shape[1])
-# stressor_dataset_out.createDimension("spatial_unit_id",stressor_aggregated_timeserie.shape[0])
-
-# time_var = stressor_dataset_out.createVariable("time","f4",("time",))
-# #number of timesteps for which the agregated stressor was calculated
-# lat_var = stressor_dataset_out.createVariable("lat","f4",("lat",))
-# lon_var = stressor_dataset_out.createVariable("lon","f4",("lon",))
-# spatial_unit_map_var = stressor_dataset_out.createVariable("spatial_unit_map","f4",("lat","lon"))
-# spatial_unit_id_var = stressor_dataset_out.createVariable("spatial_unit_id","f4")
-# #number of spatial units over which the stressor was aggrgated
-# stressor_aggregated_timeserie_var = stressor_dataset_out.createVariable("groundwater_head_aggregated_monthly","f4",("spatial_unit_id","time"))
-# stressor_aggregated_timeserie_var.units = "m"
-
-# #fill NETCDF with results
-# time_var[:] = dataset.variables["time"][0:stressor_aggregated_timeserie.shape[1]]
-# lat_var[:] = dataset.variables["lat"][:]
-# lon_var[:] = dataset.variables["lon"][:]
-# spatial_unit_map_var[:] = spatial_unit
-# spatial_unit_id_var[:] = np.array(range(stressor_aggregated_timeserie.shape[0]))
-# stressor_aggregated_timeserie_var[:] = stressor_aggregated_timeserie #ok
-
-# stressor_dataset_out.sync()#write into the  saved file 
-# print(stressor_dataset_out)
-# stressor_dataset_out.close()
+new_netcdf('output/test_groundwater_head_10_catchments_1950_to_2010', stressor_aggregated_timeserie, spatial_unit, lat1, lon1, time1, "groundwater_head", "month", "m")
