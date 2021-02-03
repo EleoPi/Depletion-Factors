@@ -95,36 +95,38 @@ stressor=dataset.variables["groundwater_depth_for_layer_1"]
 #calculation of groundwater head using groundwaterdepth and dem
 
 
+
+#initialization
+
 ntime, nlat, nlon = stressor.shape
 n_spatial_unit = np.max(spatial_unit)#number of spatial units
-#initialization
+
 n = 10 #number of catchments to make a test
 stressor_aggregated_timeserie = np.zeros((n, ntime),dtype = 'float16')
+stressor_aggregated_timeserie.shape
 #test for 2 basins, use n_spatial_unit for full picture
+#uni
 
-#loop to fill the aggregated stressor matrix. 
-#for full dataset, use ntime in for t in range (ntime)
+ 
 #this loop is designed to calculate the average groundwater head over the 
-#spatial units for each timestep. The result is a time serie of stressor vals.
+#spatial units for each timestep.
+#for full dataset, use ntime in for t in range (ntime)
+#The result is a time serie of stressor vals.
 
 for t in range(ntime):#put ntime for full range
-    stressor_time = stressor[t,:]#selectmap for time index = t
+    stressor_time = stressor[t,:,:]#selectmap for time index = t
+    stressor_temp = dem - stressor_time#calcualte GW head
     for k in range(n):#putn_spatial_unit for full range
-        dem_space = dem.copy()[spatial_unit == k] # select spatial unit k
-        stressor_time_space = stressor_time.copy()[spatial_unit == k]
-        #select stressor subset for spatial unit= k
-        stressor_temp = dem_space - stressor_time_space
-        #calculate something: groundwater head = DEM - Groundwater depth
-        stressor_aggregated_timeserie[k,t] = np.average(stressor_temp)
-        #sperform zonal aggregation
+        stressor_aggregated = stressor_temp[spatial_unit == k]
+        stressor_aggregated_timeserie[k,t] = np.mean(stressor_aggregated,dtype = 'float16')
+        #perform zonal aggregation ignoring NAN
 
 stressor_aggregated_timeserie.shape
 print(stressor_aggregated_timeserie)
 #verify that the zeros resulting from the iteration of initial condition 
 #np.zeros() are gone whhen running the full loop.
 #all gridcells have to be filled with data.
-# for n=10 time 15h36 to 15h45 more or less 1 minute for each catchment
-#total catchment = approx. 23000 !
+# for n=10 time 2 minand total catchment = approx. 23000 ! speed problem
 
 
 #create NCDF with the aggregatedstressor and spatial unit information
