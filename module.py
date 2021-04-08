@@ -1,0 +1,482 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Feb 25 10:09:30 2021
+
+@author: easpi
+"""
+
+import os
+from netCDF4 import Dataset
+from pcraster import readmap, pcr2numpy
+import numpy as np
+from numpy import isnan, ma, trapz
+from matplotlib import pyplot as plt
+from scipy import stats
+import tifffile
+import Input
+
+# #--------------------------------------------------------------------
+
+# class stressor:
+#     #the stressor is an  array with timeseries of scalar array
+#     def __init__(self, time, lat, lon, value):
+#         self.time = time
+#         self.lat = lat
+#         self.lon = lon
+#         self.value = value
+#         self.shape = value.shape
+
+
+# class spatial_unit:
+#    # ''''this class contains the informaitons from the spatial unit'''
+
+#    def __init__(self, basin_map):
+#        spatial_unit.map = ma.masked_where(isnan(basin_map) == True, basin_map)
+#        spatial_unit.idlist = np.unique(basin_map)
+#        spatial_unit.mask = isnan(basin_map)
+#        spatial_unit.shape = basin_map.shape
+        
+def index_filter(spatial_unit):
+        """
+        Parameters
+        ----------
+        spatial_unit : TYPE array (lat,lon)
+            DESCRIPTION. array containing the ID of the catchments starting with ID = 0
+    
+        Returns
+        -------
+        index_filter : TYPE tuple ([spatial unit id, (lat list,lon list)], [id list])
+        idlsit : TYPE array where the ID of the catchment is stored in the same position  as index_filter row number
+            DESCRIPTION. the list contains for each catchmetn ID, the list of latitude index in position 0 and the list of longitude indexes for position 1
+    
+        """
+        index_filter = []
+    # select ID of spatial units present in the map
+        idlist = np.unique(spatial_unit)
+        for n in idlist:
+            a = np.where(spatial_unit == n)
+            index_filter.append(a)
+        pointer_array = np.array(index_filter[0], dtype=list)
+        return pointer_array, idlist
+        
+# def set_spatial_unit(filename, var_name):
+
+#     dataset1 = Dataset(filename)
+#     print(dataset1)
+#     basin = spatial_unit(dataset1.variables[var_name][:])
+#     pointer_array = basin.index_filter()
+    
+#     return basin,pointer_array
+
+ 
+def convert_month_to_year_avg(s):
+    """
+    Parameters
+    ----------
+    s : TYPE scalar array of shape (spatial unit id, time)
+        DESCRIPTION.it represents the scalar variable timseries at monthly timestep
+
+    Returns
+    -------
+    out : TYPE scalar array (spatial unit id, time)
+        DESCRIPTION. converted array to yearly timestep (average 12 months)
+
+    """
+
+    out = np.zeros( (s.shape[0], s.shape[1]//12) )
+    for i in range(s.shape[0]):#for all catchments
+        for j in range(out.shape[1]):#for all year timesteps
+            out[i,j] = np.mean(s[i, j*12:j*12+12])
+    #out_mask = ma.masked_where(isnan(s), out)
+    out_mask = ma.masked_where(isnan(out) == 1, out)
+    return out_mask
+                   
+# def convert_month_to_year_sum(s):
+#     """
+#     Parameters
+#     ----------
+#     s : TYPE scalar array of shape (spatial unit id, time)
+#         DESCRIPTION.it represents the scalar variable timseries at monthly timestep
+
+#     Returns
+#     -------
+#     out : TYPE scalar array (spatial unit id, time)
+#         DESCRIPTION. converted array to yearly timestep (average 12 months)
+
+#     """
+
+#     out = np.zeros( (s.shape[0], s.shape[1]//12) )
+#     for i in range(s.shape[0]):#for all catchments
+#         for j in range(out.shape[1]):#for all year timesteps
+#             out[i,j] = np.sum(s[i, j*12:j*12+12])
+#     #out_mask = ma.masked_where(isnan(s), out)
+#     out_mask = ma.masked_where(isnan(out) == 1, out)
+#     return out_mask
+
+def make_map(stressor_aggregated, index_filter, spatial_unit):#correct that taking into acount the correct location of the catchment 
+    """array inputs! spatial unit with mask"""
+    """indexfilter has to be calculated based on spatial_unit beforehand"""
+    l1 = np.unique(spatial_unit)
+    # l1 = l1[np.where(isnan(l1) == 0)]
+    # l = ma.getdata(l1).tolist()
+    map_temp = np.full(spatial_unit.shape, 1e20)
+       
+    for i in l1:#for all catchment id 
+        map_temp[index_filter[l1==i][0][0], index_filter[l1==i][0][1]] = stressor_aggregated[l1==i]
+        #fill the map with the value associated with each catchment.
+    map_out = ma.masked_where(isnan(spatial_unit) == 1, map_temp)
+        
+    return map_out
+
+    
+def new_map_netcdf(filename, map_out, name_scalar, unit_scalar, lat, lon):
+    """
+    Parameters
+    ----------
+   
+    Returns
+    -------
+    None. Netcdf file is written based on the inputs. and the dataset is 
+    returned to main program.
+
+    """
+    dataset_out = Dataset(filename +'.nc','w',format = 'NETCDF4')
+    dataset_out.createDimension("latitude",lat.shape[0])
+    dataset_out.createDimension("longitude", lon.shape[0])
+    
+
+    latitude = dataset_out.createVariable("latitude","f8",("latitude",), zlib = True)
+    longitude = dataset_out.createVariable("longitude","f8",("longitude",), zlib = True)
+    scalar = dataset_out.createVariable(name_scalar,"f8",("latitude","longitude"), zlib = True)
+    scalar.units = unit_scalar
+
+    #fill NETCDF with results
+    latitude[:] = lat[:]
+    longitude[:] = lon[:]
+    scalar[:] = map_out[:]
+
+    dataset_out.sync()#write into the  saved file
+    print(dataset_out)
+    dataset_out.close()
+    return "netcdf created, check folder"
+
+def new_stressor_out_netcdf(filename, stressor_out, ID, t, name_stressor, unit_time,unit_stressor):
+    """
+    Parameters
+    ----------
+   
+    Returns
+    -------
+    None. Netcdf file is written based on the inputs. and the dataset is 
+    returned to main program.
+
+    """
+    dataset_out = Dataset(filename +'.nc','w',format = 'NETCDF4')
+    dataset_out.createDimension("spatial_unit_id",ID.shape[0])
+    dataset_out.createDimension("time", t.shape[0])
+    
+
+    time = dataset_out.createVariable("time","f4",("time",), zlib = True)
+    time.units = unit_time
+    spatial_unit_id = dataset_out.createVariable("spatial_unit_id","f4",("spatial_unit_id",), zlib = True)
+    stressor_aggregated_timeserie = dataset_out.createVariable(name_stressor,"f4",("spatial_unit_id","time"), zlib = True)
+    stressor_aggregated_timeserie.units = unit_stressor
+
+    #fill NETCDF with results
+    time[:] = t[:]
+    spatial_unit_id[:] = ID[:]
+    stressor_aggregated_timeserie [:] = stressor_out[:]
+
+    dataset_out.sync()#write into the  saved file
+    print(dataset_out)
+    dataset_out.close()
+    return "netcdf created, check folder"
+
+
+    
+
+def calculate_variation(aggregated_stressor, spatial_unit, pointer_array, latitude, longitude, stressor_name, stressor_unit):
+    '''
+    
+
+    Parameters
+    ----------
+    aggregated_stressor : TYPE ndarray
+        DESCRIPTION. ANNUAL VALUES
+    spatial_unit : TYPE ndarray masked
+        DESCRIPTION.
+    pointer_array : TYPE ndarray
+        DESCRIPTION.
+    latitude : TYPE ndarray
+        DESCRIPTION.
+    longitude : TYPE ndarray
+        DESCRIPTION.
+    stressor_name : TYPE string
+        DESCRIPTION.
+    stressor_unit : TYPE string
+        DESCRIPTION.
+
+    Returns map of the sum of the differences normlized by the mean according to the pointer array partition, 
+    values of sum of difference for each catchment (use catchment id list for equivalence between position in the array and ID number of the catchment)
+    -------
+    None.
+
+    '''
+
+
+    var = np.sum(np.diff(aggregated_stressor, axis = 1), axis = 1)
+    
+    ref = np.mean(aggregated_stressor, axis = 1)
+    
+    change = var/ref
+    
+    map_var = make_map(var, pointer_array, spatial_unit)
+    
+    map_change = make_map(change, pointer_array, spatial_unit)
+    
+    #plt.matshow(map_var, vmin = stats.scoreatpercentile(change,5), vmax = stats.scoreatpercentile(change,95))#ok
+    
+    new_map_netcdf(Input.outputDir +'/'+ stressor_name + 'normalized' + '_' + Input.name_timeperiod + '_' + Input.name_scale, map_change, stressor_name + 'normalized', stressor_unit, latitude, longitude)
+
+    new_map_netcdf(Input.outputDir +'/'+ stressor_name + '_' + Input.name_timeperiod + '_' + Input.name_scale, map_var, stressor_name, stressor_unit, latitude, longitude)
+
+    return map_var, var, map_change
+
+
+    
+
+
+def calculate_grad_avg(aggregated_stressor, spatial_unit, pointer_array, latitude, longitude, stressor_name, stressor_unit):
+    '''
+    
+
+    Parameters
+    ----------
+    aggregated_stressor : TYPE ndarray
+        DESCRIPTION. ANNUAL VALUES!!!! SELECT YEARS TO BE INCLUDED IN THE GRADIENT AVERAGE
+    spatial_unit : TYPE ndarray masked
+        DESCRIPTION.
+    pointer_array : TYPE ndarray
+        DESCRIPTION.
+    latitude : TYPE ndarray
+        DESCRIPTION.
+    longitude : TYPE ndarray
+        DESCRIPTION.
+    stressor_name : TYPE string
+        DESCRIPTION.
+    stressor_unit : TYPE string
+        DESCRIPTION.
+
+    Returns map of the gradient average over the last 10 years according to the pointer array partition, normlaized by mean value
+    values gradient average over the last 10 years for each catchment (use catchment id list for equivalence between position in the array and ID number of the catchment)
+    -------
+    None.
+
+    '''
+    gradient = np.gradient(aggregated_stressor, axis = 1)
+     
+    grad = np.mean(gradient, axis = 1)
+    
+    #grad_mean = np.mean(gradient, axis = 1)
+    
+    #change = grad_recent/grad_mean
+     
+    map_grad = make_map(grad, pointer_array, spatial_unit)
+    
+    #map_change = make_map(change, pointer_array, spatial_unit)
+    
+    plt.matshow(map_grad, vmin = stats.scoreatpercentile(grad,5), vmax = stats.scoreatpercentile(grad,95))#ok
+    #plt.imshow(s_map_grad/1e6, vmin = stats.scoreatpercentile(s_grad/1e6,5), vmax = stats.scoreatpercentile(s_grad/1e6,95))
+    #yellow is max, blue is min
+    
+    #new_map_netcdf(Input.outputDir +'/'+ stressor_name + 'normalized' + '_' + Input.name_timeperiod + '_' + Input.name_scale, map_change, stressor_name + 'normalized', stressor_unit, latitude, longitude)
+    
+    new_map_netcdf(Input.outputDir +'/'+ stressor_name + '_' + Input.name_timeperiod + '_' + Input.name_scale,  map_grad, stressor_name, stressor_unit, latitude, longitude)
+
+    return map_grad, grad
+
+def FF_lm(consumption, stressor):
+
+#def FF_lm(consumption, stressor,pointer_array, spatial_unit, stressor_name):
+
+    FF = np.full((stressor.shape[0],6), 1e20)
+
+    for i in range(stressor.shape[0]-1):
+        if np.all(consumption[i,:] != 0):#fill values  will remain where consumption is null
+            if np.all(isnan(stressor[i,:]) == 0):#fill values remain if there is no stressor value
+                slope, intercept, r, p, se = stats.linregress(consumption[i,:], stressor[i,:])
+                FF[i,0] = slope
+                FF[i,1] = intercept
+                FF[i,2] = r**2
+                FF[i,3] = p
+                FF[i,4] = slope - se#standard error of the slope
+                FF[i,5] = slope + se
+    
+    FF = ma.masked_where(FF == 1e20, FF)
+
+    r2 = FF[:,2]
+    r2 = r2[r2.mask == 0]
+    #plt.hist(r2)
+    #plt.boxplot(r2)
+    print("amount of catchments with R2>0,5:", np.where(r2>0.5)[0].shape, "out of ", r2.shape, "catchments with valid data")
+    
+    p = FF[:,3]
+    p = p[p.mask == 0]
+    #plt.hist(p)
+    #plt.boxplot(p)
+    print("amount of catchments with p<0,05:", np.where(p<0.05)[0].shape, "out of ", p.shape, "catchments with valid data")
+   
+
+    coeff = FF[:,0]
+    coeff = coeff[coeff.mask == 0]
+    #plt.boxplot(coeff)
+    print("amount of catchments with negative slope:", np.where(coeff<0)[0].shape, "out of ", coeff.shape, "catchments with valid data")
+
+    #map_ff = make_map(FF[:,0], pointer_array, spatial_unit)
+    
+   
+    #plt.matshow(map_ff, vmin = stats.scoreatpercentile(FF[:,0],5), vmax = stats.scoreatpercentile(FF[:,0],95))#ok
+     
+    #new_map_netcdf(Input.outputDir +'/'+ stressor_name + 'normalized' + '_' + Input.name_timeperiod + '_' + Input.name_scale, map_change, stressor_name + 'normalized', stressor_unit, latitude, longitude)
+    
+    #tifffile.imsave(Input.outputDir +'/'+ 'ff_regression_' + stressor_name + '_' + Input.name_timeperiod + '_' + Input.name_scale + '.tiff', map_ff)
+    
+    return FF
+
+# def FF_integral(consumption, stressor,pointer_array, spatial_unit, stressor_name):
+#     integral = np.trapz(stressor, axis = 1)#careful with the time conversion: stressor. time 
+#     integral1 = np.trapz(consumption, axis = 1)#careful with the time conversion: consumption volume
+#     ff = integral/integral1
+#     ff = ma.masked_where(isnan(ff) == 1, ff)
+#     map_ff = make_map(integral, pointer_array, spatial_unit)
+#     plt.matshow(map_ff, vmin = stats.scoreatpercentile(ff,5), vmax = stats.scoreatpercentile(ff,95))
+#     tifffile.imsave(Input.outputDir +'/'+ 'ff_integral_'+ stressor_name + '_' + Input.name_timeperiod + '_' + Input.name_scale + '.tiff', map_ff)
+#     return map_ff, ff
+
+# def FF_grad(consumption, stressor,pointer_array, spatial_unit, stressor_name):
+#     grad = np.mean(np.gradient(stressor, axis  = 1), axis=1)
+#     grad1 = np.mean(np.gradient(consumption, axis = 1), axis = 1)
+#     ff = grad/grad1
+#     ff = ma.masked_where(isnan(ff) == 1, ff)
+#     map_ff = make_map(ff, pointer_array, spatial_unit)
+#     plt.matshow(map_ff, vmin = stats.scoreatpercentile(ff,5), vmax = stats.scoreatpercentile(ff,95))
+#     tifffile.imsave(Input.outputDir +'/'+ 'ff_grad_'+ stressor_name + '_' + Input.name_timeperiod + '_' + Input.name_scale + '.tiff', map_ff)
+#     return map_ff, ff
+
+# def calculate_groundwater_head(s, dem, t):
+#     '''
+    
+#     Parameters
+#     ----------
+#     s : TYPE netcdf variable  or array (time, lat, lon)
+#         DESCRIPTION. groundwater depth 
+#     dem : TYPE array (lat, lon)
+#         DESCRIPTION. digital elevation model
+#     t : TYPE integer
+#         DESCRIPTION. timestep index in s
+
+#     Returns
+#     -------
+#     out : TYPE array(lat,lon)
+#         DESCRIPTION. groundwater head at the given timestep t
+
+#     '''
+#     s_t = s[t,:,:]
+#     out = dem - s_t
+#     return out
+
+
+
+# class stressor_maps(stressor, spatial_unit):
+ 
+#     def __init__(self, stressor_aggregated, index_filter):
+        
+#         self.variation = np.sum(np.diff(stressor_aggregated, axis = 1), axis = 1)
+#         self.gradient = np.gradient(stressor_aggregated, axis = 1)
+#         self.integral = np.trapz(self.gradient, axis = 1)
+        
+#     def make_map_variation(self, index_filter, spatial_unit):
+              
+#         l = ma.getdata(spatial_unit.idlist).tolist()
+#         a = spatial_unit.map
+#         map_temp = np.full(a.shape, 65535)
+            
+#         for i in spatial_unit.idlist:#for all catchment id 
+#             map_temp[index_filter[l.index(i),0], index_filter[l.index(i),1]] = self.variation[l.index(i)]
+                
+#         map_out = ma.masked_where(spatial_unit.mask == 1, map_temp)
+        
+#         return map_out
+    
+#     def make_map_gradient(self, index_filter, spatial_unit):
+              
+#         l = ma.getdata(spatial_unit.idlist).tolist()
+#         map_temp = np.full(spatial_unit.map.shape, 65535)
+            
+#         for i in spatial_unit.idlist:#for all catchment id 
+#             map_temp[index_filter[l.index(i),0], index_filter[l.index(i),1]] = self.gradient[l.index(i)]
+                
+#         map_out = ma.masked_where(spatial_unit.mask == 1, map_temp)
+        
+#         return map_out  
+
+# def aggregation_mean(stressor, index_filter):
+#         """
+#     Parameters
+#     ----------
+#     stressor : TYPE array (time, lat, lon)
+#         DESCRIPTION. stressor we wont to aggregate spatially
+#     index_filter : TYPE array(idlist, lat array, lon array)
+#         DESCRIPTION. filter array to select the spatial units
+
+#     Returns
+#     -------
+#     out : TYPE array(idlist, time)
+#         DESCRIPTION.the stressor is aggrgated by MEAN over each spatial unit, generating timeseries
+
+#     """
+#         out = np.zeros((index_filter.shape[0], stressor.shape[0]))
+#         for t in range(stressor.shape[0]):
+#             s = stressor.value[t,:,:]
+#             for k in range(index_filter.shape[0]):
+#                 out[k,t] = np.mean(s[index_filter[k,0],  index_filter[k,1]])
+#         return out
+                    
+# def aggregation_sum(stressor, index_filter):
+#     """
+#     Parameters
+#     ----------
+#     stressor : TYPE array (time, lat, lon)
+#         DESCRIPTION. stressor we wont to aggregate spatially
+#     index_filter : TYPE array(idlist, lat array, lon array)
+#         DESCRIPTION. filter array to select the spatial units
+
+#     Returns
+#     -------
+#     out : TYPE array(idlist, time)
+#         DESCRIPTION.the stressor is aggrgated by sum over each spatial unit, generating timeseries
+
+#     """
+#     out = np.zeros((index_filter.shape[0], stressor.time.shape[0]))
+#     for t in range(stressor.time.shape[0]):
+#         s = stressor.value[t,:,:]
+#         for k in range(index_filter.shape[0]):
+#             out[k,t] = np.sum(s[index_filter[k,0],  index_filter[k,1]])
+#     return out
+
+# def make_map_gradient(stressor_aggregated, index_filter, spatial_unit):
+#     """array inputs!"""
+#     l1 = np.unique(spatial_unit)
+#     l = ma.getdata(l1).tolist()
+#     map_temp = np.full(spatial_unit.shape, 65535)
+    
+#     stressor_aggregated_yr = convert_month_to_year_avg(stressor_aggregated)
+#     gradient = np.mean(np.gradient(stressor_aggregated_yr, axis = 1)[:,-10:], axis = 1)
+
+        
+#     for i in spatial_unit.idlist:#for all catchment id 
+#         map_temp[index_filter[l.index(i),0], index_filter[l.index(i),1]] = gradient[l.index(i)]
+                
+#     map_out = ma.masked_where(spatial_unit.mask == 1, map_temp)
+        
+#     return map_out
