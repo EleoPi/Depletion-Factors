@@ -36,7 +36,7 @@ import module
 #os.chdir(Input.inputDir)
 
 
-def aggregate(spatial_unit, pointer_array):
+def aggregate(idlist, pointer_array):
     '''
     
 
@@ -60,10 +60,13 @@ def aggregate(spatial_unit, pointer_array):
     times = d.variables["time"][:]
     # lat = d.variables["lat"][:]
     # lon = d.variables["lon"][:]
-
-
+    
+    #d1 = Dataset(Input.fn_ground_water_depth_natural)
+    d1 = Dataset('C:/Users/easpi/Documents/PhD Water Footprint/Papers/2 FF modelling with GHM/calculations/data/groundwaterDepthLayer1_yearavg_natural_output_19602010.nc')
+    gwd1 = d1.variables[Input.var_groundwater_depth_natural]
+    #times = d1.variables["time"][:]
+    
     dem = pcr2numpy(readmap(Input.inputDir + '/' + Input.fn_dem), mv = 1e20)
-
 
     sy = pcr2numpy(readmap(Input.inputDir + '/' + Input.fn_aquifer_yield), mv = 1e20)
     sy = ma.masked_values(sy, 1e20)
@@ -75,27 +78,53 @@ def aggregate(spatial_unit, pointer_array):
     n_spatial_unit = pointer_array.shape[0]
     s_aggregated = np.full((n_spatial_unit, ntime), 1e20)
     
+    # for t in range(0,ntime-1):
+    #     temp =  (gwd[t+1,:,:] - gwd[t,:,:])*sy*area#here no need to convert yearly to monthly average
+    #     for k in range(n_spatial_unit):
+    #         s_aggregated[k,t] = np.sum(temp[pointer_array[k][0],pointer_array[k][1]])
+    
+    # s_aggregated = ma.masked_where(isnan(s_aggregated), s_aggregated)
+    # gws_depletion_human = s_aggregated#monthly
+    # gws_depletion_human = ma.masked_equal(gws_depletion_human, 1e20)
+
+    # gws_depletion_human_yr = module.convert_month_to_year_sum(gws_depletion_human)
+    
+    
+    
+    # s_aggregated = np.full((n_spatial_unit, gwd1.shape[0]), 1e20)
+    # for t in range(0,gwd1.shape[0]-1):
+    #     temp =  (gwd1[t,:,:] - gwd1[t-1,:,:])*sy*area#here no need to convert yearly to monthly average
+    #     for k in range(n_spatial_unit):
+    #         s_aggregated[k,t] = np.sum(temp[pointer_array[k][0],pointer_array[k][1]])
+
+    # s_aggregated = ma.masked_where(isnan(s_aggregated), s_aggregated)
+    # gws_depletion_natural_yr = s_aggregated#yearly
+    # gws_depletion_natural_yr = ma.masked_equal(gws_depletion_natural_yr, 1e20)
+    
+    # total_depletion = gws_depletion_human_yr - gws_depletion_natural_yr
+    
     for t in range(ntime):
-        temp =  (dem - gwd[t,:,:])*sy*area
+        temp =  (dem - gwd[t,:,:] - (dem - gwd1[t//12,:,:]))*sy*area#here no need to convert yearly to monthly average
         for k in range(n_spatial_unit):
             s_aggregated[k,t] = np.sum(temp[pointer_array[k][0],pointer_array[k][1]])
     
     s_aggregated = ma.masked_where(isnan(s_aggregated), s_aggregated)  
-    ID = ma.getdata(np.unique(spatial_unit)[:-1])
+    
+    ID = ma.getdata(idlist[:-1])
 
-    module.new_stressor_out_netcdf(Input.outputDir + '/'+'test_groundwater_storage_' + Input.name_timeperiod +'_'+ Input.name_scale, s_aggregated[:-1], ID, times, 'groundwater storage', 'month', 'm3') 
+    module.new_stressor_out_netcdf(Input.outputDir + '/'+'groundwater_storage_' + Input.name_timeperiod +'_'+ Input.name_scale, s_aggregated[:-1], ID, times, 'groundwater storage', 'month', 'm3') 
     
     world = np.sum(s_aggregated, axis = 0)
     fig, ax = plt.subplots()  # Create a figure and an axes.
-    ax.plot(world/1e9, label='groundwater storage')  # Plot some data on the axes.
-    ax.set_xlabel('month')  # Add an x-label to the axes.
+    ax.plot(world/1e9, label='human-natural')  # Plot some data on the axes.
+    #ax.set_xlabel('yr')  # Add an x-label to the axes.
     ax.set_ylabel('km3')  # Add a y-label to the axes.
     ax.set_title("World groundwater storage "+Input.name_timeperiod)  # Add a title to the axes.
     ax.legend()  # Add a legend.
     
     return s_aggregated
 
-def aggregate_weight(spatial_unit, pointer_array):#this should not be used becasue the area is already accounted in the ocnversion to m3
+def aggregate_human(idlist, pointer_array):
     '''
     
 
@@ -119,10 +148,13 @@ def aggregate_weight(spatial_unit, pointer_array):#this should not be used becas
     times = d.variables["time"][:]
     # lat = d.variables["lat"][:]
     # lon = d.variables["lon"][:]
-
-
+    
+    #d1 = Dataset(Input.fn_ground_water_depth_natural)
+    #d1 = Dataset('C:/Users/easpi/Documents/PhD Water Footprint/Papers/2 FF modelling with GHM/calculations/data/groundwaterDepthLayer1_yearavg_natural_output_19602010.nc')
+    #gwd1 = d1.variables[Input.var_groundwater_depth_natural]
+    #times = d1.variables["time"][:]
+    
     dem = pcr2numpy(readmap(Input.inputDir + '/' + Input.fn_dem), mv = 1e20)
-
 
     sy = pcr2numpy(readmap(Input.inputDir + '/' + Input.fn_aquifer_yield), mv = 1e20)
     sy = ma.masked_values(sy, 1e20)
@@ -134,104 +166,48 @@ def aggregate_weight(spatial_unit, pointer_array):#this should not be used becas
     n_spatial_unit = pointer_array.shape[0]
     s_aggregated = np.full((n_spatial_unit, ntime), 1e20)
     
+    # for t in range(0,ntime-1):
+    #     temp =  (gwd[t+1,:,:] - gwd[t,:,:])*sy*area#here no need to convert yearly to monthly average
+    #     for k in range(n_spatial_unit):
+    #         s_aggregated[k,t] = np.sum(temp[pointer_array[k][0],pointer_array[k][1]])
+    
+    # s_aggregated = ma.masked_where(isnan(s_aggregated), s_aggregated)
+    # gws_depletion_human = s_aggregated#monthly
+    # gws_depletion_human = ma.masked_equal(gws_depletion_human, 1e20)
+
+    # gws_depletion_human_yr = module.convert_month_to_year_sum(gws_depletion_human)
+    
+    
+    
+    # s_aggregated = np.full((n_spatial_unit, gwd1.shape[0]), 1e20)
+    # for t in range(0,gwd1.shape[0]-1):
+    #     temp =  (gwd1[t,:,:] - gwd1[t-1,:,:])*sy*area#here no need to convert yearly to monthly average
+    #     for k in range(n_spatial_unit):
+    #         s_aggregated[k,t] = np.sum(temp[pointer_array[k][0],pointer_array[k][1]])
+
+    # s_aggregated = ma.masked_where(isnan(s_aggregated), s_aggregated)
+    # gws_depletion_natural_yr = s_aggregated#yearly
+    # gws_depletion_natural_yr = ma.masked_equal(gws_depletion_natural_yr, 1e20)
+    
+    # total_depletion = gws_depletion_human_yr - gws_depletion_natural_yr
+    
     for t in range(ntime):
-        temp =  (dem - gwd[t,:,:])*sy*area
+        temp =  (dem - gwd[t,:,:])*sy*area#here no need to convert yearly to monthly average
         for k in range(n_spatial_unit):
-            s_aggregated[k,t] = np.average(temp[pointer_array[k][0],pointer_array[k][1]], weights = area[pointer_array[k][0],pointer_array[k][1]])
+            s_aggregated[k,t] = np.sum(temp[pointer_array[k][0],pointer_array[k][1]])
     
     s_aggregated = ma.masked_where(isnan(s_aggregated), s_aggregated)  
-    ID = ma.getdata(np.unique(spatial_unit)[:-1])
+    
+    ID = ma.getdata(idlist[:-1])
 
-    module.new_stressor_out_netcdf(Input.outputDir + '/'+'test_groundwater_storage_weighed_avg' + Input.name_timeperiod +'_'+ Input.name_scale, s_aggregated[:-1], ID, times, 'groundwater storage', 'month', 'm3') 
+    module.new_stressor_out_netcdf(Input.outputDir + '/'+'groundwater_storage_human_' + Input.name_timeperiod +'_'+ Input.name_scale, s_aggregated[:-1], ID, times, 'groundwater storage', 'month', 'm3') 
     
     world = np.sum(s_aggregated, axis = 0)
     fig, ax = plt.subplots()  # Create a figure and an axes.
-    ax.plot(world/1e9, label='groundwater storage')  # Plot some data on the axes.
-    ax.set_xlabel('month')  # Add an x-label to the axes.
+    ax.plot(world/1e9, label='human')  # Plot some data on the axes.
+    #ax.set_xlabel('yr')  # Add an x-label to the axes.
     ax.set_ylabel('km3')  # Add a y-label to the axes.
     ax.set_title("World groundwater storage "+Input.name_timeperiod)  # Add a title to the axes.
     ax.legend()  # Add a legend.
     
     return s_aggregated
-
-def calculate_variation(aggregated_mean, spatial_unit, pointer_array):
-    '''
-    
-
-    Parameters
-    ----------
-     aggregated_mean : TYPE groundwater aggregated array (spatial_units, time)
-        DESCRIPTION.represents the mean GWH for each catchments defined in spatial_unit
-    basin : TYPE array
-        DESCRIPTION. spatial_unit delineation and clonemap
-    pointer_array : TYPE array
-        DESCRIPTION.filter array that identified the coordinates of each spatial units
-
-    Returns map of the variation of the groundwater head over the period correpsonding to spatial units, and values for each catchemnts
-    -------
-    None.
-
-    '''
-
-    d = Dataset(Input.inputDir + '/' + Input.fn_ground_water_depth)
-#    gwd = d.variables[Input.var_groundwater_depth]
-#    t = d.variables["time"][:]
-    lat = d.variables["lat"][:]
-    lon = d.variables["lon"][:]
-    
-#average FF
-    var = np.sum(np.diff(aggregated_mean, axis = 1), axis = 1)
-    
-    map_var = module.make_map(var, pointer_array, spatial_unit)
-    
-    plt.matshow(map_var, vmin = stats.scoreatpercentile(var,5), vmax = stats.scoreatpercentile(var,95))#ok
-    
-    module.new_map_netcdf(Input.outputDir +'/'+"test_groundwater_storage_variation_" + Input.name_timeperiod + '_' + Input.name_scale, map_var, "groundwater storage", "m3", lat, lon)
-        
-    return map_var, var 
-
-def calculate_grad_avg(aggregated_mean, spatial_unit, pointer_array):
-    """
-    
-
-    Parameters
-    ----------
-    aggregated_mean : TYPE groundwater aggregated array (spatial_units, time)
-        DESCRIPTION.represents the mean GWH for each catchments defined in spatial_unit
-    basin : TYPE array
-        DESCRIPTION. spatial_unit delineation and clonemap
-    pointer_array : TYPE array
-        DESCRIPTION.filter array that identified the coordinates of each spatial units
-
-    Returns map of the annual gradient average over the last 10 years in each spatial unit,  gradient values for each spatial unit
-    -------
-    None.
-
-    """
-    d = Dataset(Input.inputDir + '/' + Input.fn_ground_water_depth)
-#    gwd = d.variables[Input.var_groundwater_depth]
-#    times = d.variables["time"][:]
-    lat = d.variables["lat"][:]
-    lon = d.variables["lon"][:]
-     
-    #adjust interval for gradient calculation
-    # intervals_year = np.zeros(times.shape[0]//12)
-    
-    # for i in range(times.shape[0]//12):
-    #     intervals_year[i] = times[i+12]-times[i]
-
-    aggregated_yr = module.convert_month_to_year_avg(aggregated_mean)
-    
-    aggregated_yr_mask = ma.masked_where(isnan(aggregated_yr) == 1, aggregated_yr)
-    #mean of temporal gradient over the last 10 years.
-    grad = np.mean(np.gradient(aggregated_yr_mask, axis = 1)[:, -10:], axis = 1)
-    
-    map_grad = module.make_map(grad, pointer_array, spatial_unit)
-    
-    map_grad_mask = ma.masked_where(isnan(map_grad), map_grad)
-    
-    plt.imshow(map_grad_mask)
-    
-    module.new_map_netcdf(Input.outputDir +'/'+ "test_groundwater_storage_gradient_"+ Input.name_timeperiod + '_' + Input.name_scale, map_grad_mask, "groundwater storage gradient", "m3/yr", lat, lon)
-
-    return map_grad, grad

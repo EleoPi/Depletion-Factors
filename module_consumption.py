@@ -35,7 +35,7 @@ import module
 # input directory
 #os.chdir(Input.inputDir)
 
-def aggregate_return_flow_irrigation(spatial_unit, pointer_array):
+def aggregate_return_flow_irrigation(pointer_array):
     '''
     
 
@@ -101,7 +101,7 @@ def aggregate_return_flow_irrigation(spatial_unit, pointer_array):
     return return_flow_irrigation, return_flow_irrigation_yr_filtered
 
 
-def aggregate_return_flow_non_irrigation(spatial_unit, pointer_array):
+def aggregate_return_flow_non_irrigation(pointer_array):
     '''
     
 
@@ -163,7 +163,7 @@ def aggregate_return_flow_non_irrigation(spatial_unit, pointer_array):
     
     return return_flow_non_irrigation, return_flow_non_irrigation_filtered
 
-def aggregate_abstraction(spatial_unit, pointer_array):
+def aggregate_abstraction(pointer_array):
     '''
     
 
@@ -210,7 +210,7 @@ def aggregate_abstraction(spatial_unit, pointer_array):
    
     return abstraction_aggregated_filtered
 
-def calculate_net_consumption(abstraction, return_flow_irrigation, return_flow_non_irrigation, spatial_unit):
+def calculate_net_consumption(abstraction, return_flow_irrigation, return_flow_non_irrigation, idlist):
  
     d = Dataset('D:/Fate/data/totalAbstractions_annuaTot_1960to2010.nc')
 
@@ -238,8 +238,10 @@ def calculate_net_consumption(abstraction, return_flow_irrigation, return_flow_n
     ax.legend()  # Add a legend.
 
 
-    ID = ma.getdata(np.unique(spatial_unit)[:-1])
-
+    ID = ma.getdata(idlist)[:-1]
+    #ID = ma.getdata(np.unique(spatial_unit)[3:-1])#for valerios catchment
+    
+    
     module.new_stressor_out_netcdf(Input.outputDir + '/'+'consumption_' + Input.name_timeperiod + '_' + Input.name_scale, net_consumption[:-1,:], ID, times, 'net water consumption', 'year', 'm3') 
 
     module.new_stressor_out_netcdf(Input.outputDir + '/'+'return_flows_'+ Input.name_timeperiod + '_' + Input.name_scale, total_return_flows[:-1,:] , ID, times, 'total return flows irrigation  and non irrigation', 'year', 'm3') 

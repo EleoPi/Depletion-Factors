@@ -51,7 +51,7 @@ import module
  
 
 
-def aggregate(spatial_unit, pointer_array):
+def aggregate(idlist, pointer_array):
     '''
     
 
@@ -73,14 +73,99 @@ def aggregate(spatial_unit, pointer_array):
     
     area = pcr2numpy(readmap(Input.inputDir +'/'+ Input.fn_area_map), mv = 1e20)
     
-    d = Dataset(Input.fn_soil_low)
+    d = Dataset(Input.inputDir +'/'+ Input.fn_soil_low)
+    slow = d.variables["lower_soil_storage"][:]
+    
+    #lat = d.variables["latitude"][:]
+    #lon = d.variables["longitude"][:]
+    d.close()
+    
+    d = Dataset(Input.inputDir +'/'+ Input.fn_soil_upp)
+    sup = d.variables["upper_soil_storage"][:]
+    d.close()
+    
+    soil_moisture = slow + sup
+    
+    d1 = Dataset(Input.inputDir +'/'+ Input.fn_soil_low_nat)
+    times = d1.variables["time"][:]
+    slow1 = d1.variables["lower_soil_storage"][:]
+    #lat = d.variables["latitude"][:]
+    #lon = d.variables["longitude"][:]
+    d1.close()
+    
+    d1 = Dataset(Input.inputDir +'/'+ Input.fn_soil_upp_nat)
+    sup1 = d1.variables["upper_soil_storage"][:]
+    d1.close()
+    
+    soil_moisture1 = slow1 + sup1
+    
+    s = soil_moisture[45,:,:] - soil_moisture1
+    
+    
+    
+#aggrgeate 
+    ntime, nlat, nlon = s.shape
+    n_spatial_unit = pointer_array.shape[0]
+    s_aggregated = np.full((n_spatial_unit, ntime), 1e20)
+    
+    
+    for t in range(ntime):
+        temp =  s[t,:,:]*area#conversion to m3
+        for i in range(n_spatial_unit):#select catchment in the same order as the pointer array sot hat the idlist is still valid
+            s_aggregated[i,t] = np.sum(temp[pointer_array[i][0], pointer_array[i][1]])
+
+    s_aggregated = ma.masked_where(isnan(s_aggregated), s_aggregated)
+
+
+    ID = ma.getdata(idlist[:-1])
+
+    module.new_stressor_out_netcdf(Input.outputDir + '/'+'soil_moisture_human-natural_' + Input.name_timeperiod + '_' + Input.name_scale, s_aggregated[:-1], ID, times, 'soil moisture', 'year', 'm3') 
+    
+    world_SM = np.sum(s_aggregated, axis = 0)
+    
+    
+    # Note that even in the OO-style, we use `.pyplot.figure` to create the figure.
+    fig, ax = plt.subplots()  # Create a figure and an axes.
+    ax.plot(world_SM/1e9, label='soil moisture')  # Plot some data on the axes.
+    ax.set_xlabel('year')  # Add an x-label to the axes.
+    ax.set_ylabel('km3')  # Add a y-label to the axes.
+    ax.set_title("World soil moisture human - natural "+Input.name_timeperiod)  # Add a title to the axes.
+    ax.legend()  # Add a legend.
+    
+    np.sum(world_SM)/1e9
+    
+    return s_aggregated
+
+def aggregate_human(idlist, pointer_array):
+    '''
+    
+
+    Parameters
+    ----------
+    basin : TYPE scalar array
+        DESCRIPTION. spatial unit IDs
+    pointer_array : TYPE array (spatialunit,indexes)
+        DESCRIPTION. for each spatial unit (rows) there is an index filter pointing at the coordinates of the spatial unit
+        correspondence between catchment ID and spatial_unit row is does using the idlist 
+
+    Returns timeseries of the groundwater head average over each spatial unit for all timesteps 
+    -------
+    None.
+
+    '''
+
+#-----------------------------------------------------------
+    
+    area = pcr2numpy(readmap(Input.inputDir +'/'+ Input.fn_area_map), mv = 1e20)
+    
+    d = Dataset(Input.inputDir +'/'+Input.fn_soil_low)
     slow = d.variables["lower_soil_storage"][:]
     times = d.variables["time"][:]
     #lat = d.variables["latitude"][:]
     #lon = d.variables["longitude"][:]
     d.close()
     
-    d = Dataset(Input.fn_soil_upp)
+    d = Dataset(Input.inputDir +'/'+Input.fn_soil_upp)
     sup = d.variables["upper_soil_storage"][:]
     d.close()
     
@@ -103,10 +188,10 @@ def aggregate(spatial_unit, pointer_array):
 
     s_aggregated = ma.masked_where(isnan(s_aggregated), s_aggregated)
 
-    idlist = np.unique(spatial_unit)
+
     ID = ma.getdata(idlist[:-1])
 
-    module.new_stressor_out_netcdf(Input.outputDir + '/'+'test_soil_moisture_' + Input.name_timeperiod + '_' + Input.name_scale, s_aggregated[:-1], ID, times, 'soil moisture', 'year', 'm3') 
+    module.new_stressor_out_netcdf(Input.outputDir + '/'+'test_soil_moisture_human_' + Input.name_timeperiod + '_' + Input.name_scale, s_aggregated[:-1], ID, times, 'soil moisture', 'year', 'm3') 
     
     world_SM = np.sum(s_aggregated, axis = 0)
     
@@ -119,82 +204,7 @@ def aggregate(spatial_unit, pointer_array):
     ax.set_title("World soil moisture "+Input.name_timeperiod)  # Add a title to the axes.
     ax.legend()  # Add a legend.
     
-    np.mean(world_SM)/1e9
+    np.sum(world_SM)/1e9
     
     return s_aggregated
 
-def calculate_variation(aggregated, spatial_unit, pointer_array):
-    '''
-    
-
-    Parameters
-    ----------
-     aggregated_mean : TYPE groundwater aggregated array (spatial_units, time)
-        DESCRIPTION.represents the mean GWH for each catchments defined in spatial_unit
-    basin : TYPE array
-        DESCRIPTION. spatial_unit delineation and clonemap
-    pointer_array : TYPE array
-        DESCRIPTION.filter array that identified the coordinates of each spatial units
-
-    Returns map of the variation of the groundwater head over the period correpsonding to spatial units, and values for each catchemnts
-    -------
-    None.
-
-    '''
-
-    d = Dataset(Input.inputDir + '/' + Input.fn_ground_water_depth)
-#    gwd = d.variables[Input.var_groundwater_depth]
-#    t = d.variables["time"][:]
-    lat = d.variables["lat"][:]
-    lon = d.variables["lon"][:]
-    
-#average FF
-    var = np.sum(np.diff(aggregated, axis = 1), axis = 1)
-    
-    map_var = module.make_map(var, pointer_array, spatial_unit)
-    
-    map_var_mask = ma.masked_where(isnan(map_var), map_var)
-    
-    plt.imshow(map_var_mask, vmin = stats.scoreatpercentile(var,5), vmax = stats.scoreatpercentile(var,95))
-    
-    module.new_map_netcdf(Input.outputDir +'/'+"test_soil_moisture_variation_"+ Input.name_timeperiod + '_' + Input.name_scale, map_var_mask, "soil_moisture", "m3", lat, lon)
-   
-    return map_var, var
-
-
-
-def calculate_grad_avg(aggregated, spatial_unit, pointer_array):
-    """
-    
-
-    Parameters
-    ----------
-    aggregated_mean : TYPE groundwater aggregated array (spatial_units, time)
-        DESCRIPTION.represents the mean GWH for each catchments defined in spatial_unit
-    basin : TYPE array
-        DESCRIPTION. spatial_unit delineation and clonemap
-    pointer_array : TYPE array
-        DESCRIPTION.filter array that identified the coordinates of each spatial units
-
-    Returns map of the annual gradient average over the last 10 years in each spatial unit,  gradient values for each spatial unit
-    -------
-    None.
-
-    """
-    d = Dataset(Input.inputDir + '/' + Input.fn_ground_water_depth)
-#    gwd = d.variables[Input.var_groundwater_depth]
-#    times = d.variables["time"][:]
-    lat = d.variables["lat"][:]
-    lon = d.variables["lon"][:]
-     
-    grad = np.mean(np.gradient(aggregated, axis = 1)[:, -10:], axis = 1)
-    
-    map_grad = module.make_map(grad, pointer_array, spatial_unit)
-    
-    map_grad_mask = ma.masked_where(isnan(map_grad), map_grad)
-    
-    plt.imshow(map_grad_mask/1e12, vmin = stats.scoreatpercentile(grad/1e12,5), vmax = stats.scoreatpercentile(grad/1e6,95))
-    
-    module.new_map_netcdf(Input.outputDir +'/'+ "test_soil_moisture_gradient_"+ Input.name_timeperiod + '_' + Input.name_scale, map_grad, "soil moisture gradient", "m3/yr", lat, lon)
-
-    return map_grad, grad
