@@ -1,2 +1,1 @@
-# fate
-fate factor development
+# depletion factor study
